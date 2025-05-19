@@ -17,6 +17,12 @@ end
 target 'HealthTracker' do
   config = use_native_modules!
 
+  # Add Firebase pods
+  pod 'Firebase', :modular_headers => true
+  pod 'FirebaseCore', :modular_headers => true
+  pod 'GoogleUtilities', :modular_headers => true
+  pod 'FirebaseAuth'
+  
   use_react_native!(
     :path => config[:reactNativePath],
     # An absolute path to your application root.
