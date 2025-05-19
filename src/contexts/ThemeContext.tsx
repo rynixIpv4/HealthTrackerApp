@@ -7,9 +7,9 @@ export type ThemeType = 'light' | 'dark';
 
 // Dark Theme Colors
 const DarkTheme = {
-  primary: '#7400B8',
-  secondary: '#48BFE3',
-  accent: '#64DFDF',
+  primary: '#4285F4',
+  secondary: '#3367D6',
+  accent: '#03DAC6',
   background: '#121212',
   surface: '#1E1E1E',
   text: '#FFFFFF',
@@ -23,20 +23,20 @@ const DarkTheme = {
   buttonText: '#FFFFFF',
   disabled: '#666666',
   // Chart colors 
-  chartRed: '#FF6B6B',
-  chartBlue: '#48BFE3',
+  chartRed: '#F44336',
+  chartBlue: '#2196F3',
   chartGreen: '#4CAF50',
-  chartOrange: '#FFA000',
-  chartPurple: '#9775FA',
+  chartOrange: '#FF9800',
+  chartPurple: '#9C27B0',
   // Card background colors
-  cardHeart: '#1E2A38',
-  cardSteps: '#2D2B38',
-  cardSleep: '#1E2F38',
-  cardCycling: '#1E3825',
+  cardHeart: '#1E1E1E',
+  cardSteps: '#1E1E1E',
+  cardSleep: '#1E1E1E',
+  cardCycling: '#1E1E1E',
   // Additional UI colors
   divider: '#2C2C2C',
   cardHeaderBg: '#262626',
-  tabActive: '#7400B8',
+  tabActive: '#4285F4',
   tabInactive: '#555555',
   darkBackground: '#121212',
   lightBackground: '#1F1F1F',
@@ -44,12 +44,12 @@ const DarkTheme = {
 
 // Light Theme Colors
 const LightTheme = {
-  primary: '#5E60CE',
-  secondary: '#64DFDF',
-  accent: '#7400B8',
-  background: '#F5F7FA',
+  primary: '#4285F4',
+  secondary: '#3367D6',
+  accent: '#03DAC6',
+  background: '#FFFFFF',
   surface: '#FFFFFF',
-  text: '#121212',
+  text: '#000000',
   textSecondary: '#757575',
   border: '#E0E0E0',
   icon: '#757575',
@@ -60,23 +60,23 @@ const LightTheme = {
   buttonText: '#FFFFFF',
   disabled: '#BDBDBD',
   // Chart colors
-  chartRed: '#FF6B6B',
-  chartBlue: '#48BFE3',
+  chartRed: '#F44336',
+  chartBlue: '#2196F3',
   chartGreen: '#4CAF50',
   chartOrange: '#FF9800',
-  chartPurple: '#5E60CE',
+  chartPurple: '#9C27B0',
   // Card background colors
-  cardHeart: '#FFEEEE',
-  cardSteps: '#F0EEFF',
-  cardSleep: '#E4F3FF',
-  cardCycling: '#E8F5E9',
+  cardHeart: '#FFFFFF',
+  cardSteps: '#FFFFFF',
+  cardSleep: '#FFFFFF',
+  cardCycling: '#FFFFFF',
   // Additional UI colors
   divider: '#EEEEEE',
   cardHeaderBg: '#F8F8F8',
-  tabActive: '#5E60CE',
+  tabActive: '#4285F4',
   tabInactive: '#BDBDBD',
   darkBackground: '#121212',
-  lightBackground: '#F5F7FA',
+  lightBackground: '#FFFFFF',
 };
 
 // Get theme colors based on theme type
