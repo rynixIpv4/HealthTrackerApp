@@ -191,7 +191,7 @@ const AboutAppScreen = () => {
           
           <TouchableOpacity 
             style={styles.contactItem}
-            onPress={() => handleOpenLink('https://github.com')}
+            onPress={() => handleOpenLink('https://github.com/rynixIpv4/HealthTrackerApp')}
           >
             <View style={styles.contactItemLeft}>
               <View style={[styles.iconContainer, { backgroundColor: isDarkMode ? '#303F9F20' : '#F0EEFF' }]}>

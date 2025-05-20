@@ -28,11 +28,11 @@ const DarkTheme = {
   chartGreen: '#4CAF50',
   chartOrange: '#FF9800',
   chartPurple: '#9C27B0',
-  // Card background colors
-  cardHeart: '#1E1E1E',
-  cardSteps: '#1E1E1E',
-  cardSleep: '#1E1E1E',
-  cardCycling: '#1E1E1E',
+  // Card background colors - updated to be opaque
+  cardHeart: '#2C2E43',
+  cardSteps: '#32334D',
+  cardSleep: '#2E3852',
+  cardCycling: '#2D3C4F',
   // Additional UI colors
   divider: '#2C2C2C',
   cardHeaderBg: '#262626',
@@ -65,11 +65,11 @@ const LightTheme = {
   chartGreen: '#4CAF50',
   chartOrange: '#FF9800',
   chartPurple: '#9C27B0',
-  // Card background colors
-  cardHeart: '#FFFFFF',
-  cardSteps: '#FFFFFF',
-  cardSleep: '#FFFFFF',
-  cardCycling: '#FFFFFF',
+  // Card background colors - updated to be opaque
+  cardHeart: '#FFF0F0',
+  cardSteps: '#FFF8E1',
+  cardSleep: '#E8F5E9',
+  cardCycling: '#E1F5FE',
   // Additional UI colors
   divider: '#EEEEEE',
   cardHeaderBg: '#F8F8F8',
