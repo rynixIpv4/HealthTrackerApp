@@ -46,12 +46,26 @@ const AboutAppScreen = () => {
   };
 
   const handleOpenLink = (url) => {
+    console.log(`Attempting to open URL: ${url}`);
     Linking.canOpenURL(url).then(supported => {
       if (supported) {
+        console.log(`Opening URL: ${url}`);
         Linking.openURL(url);
       } else {
         console.log(`Cannot open URL: ${url}`);
+        // Fallback for URLs that can't be opened directly
+        if (url.includes('github.com')) {
+          const fallbackUrl = `https://github.com/rynixIpv4/HealthTrackerApp`;
+          console.log(`Trying fallback URL: ${fallbackUrl}`);
+          Linking.openURL(fallbackUrl);
+        }
       }
+    }).catch(err => {
+      console.error(`Error opening URL: ${err}`);
+      // Open URL directly as a fallback
+      Linking.openURL(url).catch(() => {
+        console.error('Failed to open URL even with fallback method');
+      });
     });
   };
 
