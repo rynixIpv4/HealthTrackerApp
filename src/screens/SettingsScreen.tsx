@@ -141,7 +141,7 @@ const SettingsScreen = () => {
                 <View style={styles.settingTextContainer}>
                   <Text style={[styles.settingText, { color: colors.text }]}>Security</Text>
                   <Text style={[styles.settingDescription, { color: colors.textSecondary }]}>
-                    Password, 2FA, and login settings
+                    Password and login settings
                   </Text>
                 </View>
               </View>
