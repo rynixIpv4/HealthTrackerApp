@@ -24,6 +24,7 @@ import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import Feather from 'react-native-vector-icons/Feather';
 import { useTheme, getThemeColors } from '../contexts/ThemeContext';
 import LinearGradient from 'react-native-linear-gradient';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface EmergencyContact {
   id: string;
@@ -61,52 +62,70 @@ const EmergencyContactsScreen = () => {
     try {
       setLoading(true);
       
-      // First, ensure the user document exists
-      await firestore()
-        .collection('users')
-        .doc(user.uid)
-        .set({
-          updatedAt: firestore.FieldValue.serverTimestamp(),
-        }, { merge: true });
-      
-      // Then fetch emergency contacts
-      const snapshot = await firestore()
-        .collection('users')
-        .doc(user.uid)
-        .collection('emergencyContacts')
-        .get();
-
-      const fetchedContacts: EmergencyContact[] = [];
-      snapshot.forEach(doc => {
-        fetchedContacts.push({
-          id: doc.id,
-          ...doc.data()
-        } as EmergencyContact);
-      });
-
-      setContacts(fetchedContacts);
-    } catch (error) {
-      console.error('Error fetching emergency contacts:', error);
-      // Handle specific error messages
-      if (error.toString().includes('permission-denied')) {
-        console.log('Firestore permission denied. Detailed error:', error);
-        Alert.alert(
-          'Permission Error',
-          'Unable to access emergency contacts due to permission settings. Please check your internet connection and try again.',
-          [
-            {
-              text: 'Try Again',
-              onPress: () => fetchEmergencyContacts()
-            },
-            {
-              text: 'OK',
-              style: 'cancel'
-            }
-          ]
-        );
-      } else {
-        Alert.alert('Error', 'Failed to load emergency contacts. Please try again.');
+      // First try to get contacts from AsyncStorage
+      try {
+        const storedContacts = await AsyncStorage.getItem(`emergency_contacts_${user.uid}`);
+        if (storedContacts) {
+          console.log('Retrieved emergency contacts from AsyncStorage');
+          setContacts(JSON.parse(storedContacts));
+          setLoading(false);
+          return; // Exit if we successfully loaded from AsyncStorage
+        }
+      } catch (asyncError) {
+        console.error('Error retrieving from AsyncStorage:', asyncError);
+        // Continue to try Firestore if AsyncStorage fails
       }
+      
+      // Try Firestore if AsyncStorage is empty or failed
+      try {
+        // First, ensure the user document exists
+        await firestore()
+          .collection('users')
+          .doc(user.uid)
+          .set({
+            updatedAt: firestore.FieldValue.serverTimestamp(),
+          }, { merge: true });
+        
+        // Then fetch emergency contacts
+        const snapshot = await firestore()
+          .collection('users')
+          .doc(user.uid)
+          .collection('emergencyContacts')
+          .get();
+
+        const fetchedContacts: EmergencyContact[] = [];
+        snapshot.forEach(doc => {
+          fetchedContacts.push({
+            id: doc.id,
+            ...doc.data()
+          } as EmergencyContact);
+        });
+
+        // Save to AsyncStorage for offline use
+        await AsyncStorage.setItem(`emergency_contacts_${user.uid}`, JSON.stringify(fetchedContacts));
+        
+        setContacts(fetchedContacts);
+      } catch (firestoreError) {
+        console.error('Firestore error:', firestoreError);
+        // Handle specific error messages
+        if (firestoreError.toString().includes('permission-denied')) {
+          console.log('Firestore permission denied. Detailed error:', firestoreError);
+          Alert.alert(
+            'Offline Mode',
+            'Unable to connect to the server. Working with locally saved contacts.',
+            [{ text: 'OK' }]
+          );
+        } else {
+          Alert.alert(
+            'Connection Error', 
+            'Unable to connect to the server. Working with locally saved contacts.',
+            [{ text: 'OK' }]
+          );
+        }
+      }
+    } catch (error) {
+      console.error('Error in fetchEmergencyContacts:', error);
+      Alert.alert('Error', 'An unexpected error occurred while loading contacts.');
     } finally {
       setLoading(false);
     }
@@ -161,90 +180,106 @@ const EmergencyContactsScreen = () => {
     try {
       setIsSubmitting(true);
       
-      // First, ensure the user document exists
-      await firestore()
-        .collection('users')
-        .doc(user.uid)
-        .set({
-          updatedAt: firestore.FieldValue.serverTimestamp(),
-        }, { merge: true });
+      // Create contact object
+      const contactData = {
+        name,
+        phoneNumber,
+        relationship,
+        updatedAt: new Date().toISOString(),
+      };
       
-      if (selectedContact) {
-        // Update existing contact
-        try {
+      let updatedContacts = [...contacts];
+      let savedToFirestore = false;
+      
+      // Try to save to Firestore first
+      try {
+        // First, ensure the user document exists
         await firestore()
           .collection('users')
           .doc(user.uid)
-          .collection('emergencyContacts')
-          .doc(selectedContact.id)
-          .update({
-            name,
-            phoneNumber,
-            relationship,
+          .set({
             updatedAt: firestore.FieldValue.serverTimestamp(),
-          });
-          
-        Alert.alert('Success', 'Emergency contact updated successfully');
-        } catch (updateError) {
-          console.error('Error updating contact:', updateError);
-          
-          // If update fails, try set with merge instead
+          }, { merge: true });
+        
+        if (selectedContact) {
+          // Update existing contact
           await firestore()
             .collection('users')
             .doc(user.uid)
             .collection('emergencyContacts')
             .doc(selectedContact.id)
-            .set({
-              name,
-              phoneNumber,
-              relationship,
+            .update({
+              ...contactData,
               updatedAt: firestore.FieldValue.serverTimestamp(),
-            }, { merge: true });
+            });
             
-          Alert.alert('Success', 'Emergency contact updated successfully');
-        }
-      } else {
-        // Add new contact
-        await firestore()
-          .collection('users')
-          .doc(user.uid)
-          .collection('emergencyContacts')
-          .add({
-            name,
-            phoneNumber,
-            relationship,
-            createdAt: firestore.FieldValue.serverTimestamp(),
-          });
+          updatedContacts = contacts.map(contact => 
+            contact.id === selectedContact.id 
+              ? { ...contact, ...contactData }
+              : contact
+          );
+        } else {
+          // Add new contact
+          const docRef = await firestore()
+            .collection('users')
+            .doc(user.uid)
+            .collection('emergencyContacts')
+            .add({
+              ...contactData,
+              createdAt: firestore.FieldValue.serverTimestamp(),
+            });
 
-        Alert.alert('Success', 'Emergency contact added successfully');
+          // Add the new contact with the Firestore-generated ID
+          updatedContacts = [
+            ...contacts,
+            { 
+              id: docRef.id,
+              ...contactData
+            } as EmergencyContact
+          ];
+        }
+        
+        savedToFirestore = true;
+      } catch (firestoreError) {
+        console.error('Error saving to Firestore:', firestoreError);
+        
+        // If Firestore fails, we'll continue and just save to AsyncStorage
+        if (!selectedContact) {
+          // For new contacts, generate a local ID
+          const localId = `local_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+          updatedContacts = [
+            ...contacts,
+            { 
+              id: localId,
+              ...contactData
+            } as EmergencyContact
+          ];
+        } else {
+          // For existing contacts
+          updatedContacts = contacts.map(contact => 
+            contact.id === selectedContact.id 
+              ? { ...contact, ...contactData }
+              : contact
+          );
+        }
       }
       
-      // Update local state and close modal
-      if (selectedContact) {
-        setContacts(
-          contacts.map(contact => 
-            contact.id === selectedContact.id 
-              ? { ...contact, name, phoneNumber, relationship }
-              : contact
-          )
-        );
-      } else {
-        // For new contacts, do a fresh fetch to get the server-generated ID
-        await fetchEmergencyContacts();
-      }
+      // Always update AsyncStorage with latest contacts
+      await AsyncStorage.setItem(`emergency_contacts_${user.uid}`, JSON.stringify(updatedContacts));
+      
+      // Update state with our changes
+      setContacts(updatedContacts);
       
       setShowAddModal(false);
+      
+      if (savedToFirestore) {
+        Alert.alert('Success', selectedContact ? 'Emergency contact updated successfully' : 'Emergency contact added successfully');
+      } else {
+        Alert.alert('Saved Locally', 'Contact saved to your device. It will sync when you reconnect to the internet.');
+      }
     } catch (error) {
       console.error('Error saving emergency contact:', error);
-      
-      if (error.toString().includes('permission-denied')) {
-        Alert.alert(
-          'Permission Error', 
-          'Unable to save contact due to permission settings. Please try again later.'
-        );
-      } else {
       Alert.alert('Error', 'Failed to save emergency contact. Please try again.');
-      }
     } finally {
       setIsSubmitting(false);
     }
@@ -267,15 +302,26 @@ const EmergencyContactsScreen = () => {
           style: 'destructive',
           onPress: async () => {
             try {
-              await firestore()
-                .collection('users')
-                .doc(user.uid)
-                .collection('emergencyContacts')
-                .doc(contactId)
-                .delete();
-                
-              // Remove from state
-              setContacts(contacts.filter(contact => contact.id !== contactId));
+              const updatedContacts = contacts.filter(contact => contact.id !== contactId);
+              
+              // Try to delete from Firestore
+              try {
+                await firestore()
+                  .collection('users')
+                  .doc(user.uid)
+                  .collection('emergencyContacts')
+                  .doc(contactId)
+                  .delete();
+              } catch (firestoreError) {
+                console.error('Error deleting from Firestore:', firestoreError);
+                // We'll continue even if Firestore delete fails
+              }
+              
+              // Always update AsyncStorage
+              await AsyncStorage.setItem(`emergency_contacts_${user.uid}`, JSON.stringify(updatedContacts));
+              
+              // Update local state
+              setContacts(updatedContacts);
               Alert.alert('Success', 'Contact deleted successfully');
             } catch (error) {
               console.error('Error deleting contact:', error);

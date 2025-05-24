@@ -67,21 +67,6 @@ const SecurityScreen = () => {
   
   useEffect(() => {
     console.log('SecurityScreen: Initializing');
-    
-    // Test Firebase permissions when the screen loads
-    const user = auth().currentUser;
-    if (user) {
-      console.log('Testing Firebase permissions on init');
-      checkFirestorePermissions(user.uid)
-        .then(result => {
-          console.log('Permission check result:', result);
-        })
-        .catch(err => {
-          console.error('Permission check error:', err);
-        });
-    } else {
-      console.log('No user logged in for permission check');
-    }
   }, []);
 
   const handleChangePassword = () => {
@@ -147,26 +132,6 @@ const SecurityScreen = () => {
       }
     } finally {
       setIsLoading(false);
-    }
-  };
-
-  const checkFirestorePermissions = async (userId) => {
-    try {
-      // Try to read a dummy doc to see if permissions are working
-      const testRead = await firestore().collection('permission_test').doc(userId).get();
-      console.log('Read permission test result:', testRead.exists);
-      
-      // Try to write a dummy doc to see if permissions are working
-      await firestore().collection('permission_test').doc(userId).set({
-        test: 'value',
-        timestamp: firestore.FieldValue.serverTimestamp()
-      });
-      console.log('Write permission test succeeded');
-      
-      return { read: true, write: true };
-    } catch (error) {
-      console.error('Permission test error:', error);
-      return { read: false, write: false, error: error.message };
     }
   };
 
@@ -417,48 +382,6 @@ const SecurityScreen = () => {
                 <Text style={[styles.settingTitle, { color: colors.text }]}>Privacy Policy</Text>
                 <Text style={[styles.settingDescription, { color: colors.textSecondary }]}>
                   View our data handling policies
-                </Text>
-              </View>
-            </View>
-            <View style={[styles.arrowContainer, { backgroundColor: isDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)' }]}>
-              <Feather name="chevron-right" size={22} color={colors.textSecondary} />
-            </View>
-          </TouchableOpacity>
-          
-          <View style={[styles.divider, { backgroundColor: colors.border }]} />
-          
-          <TouchableOpacity 
-            style={styles.settingRow}
-            onPress={() => {
-              Alert.alert(
-                'Delete Account',
-                'Are you sure you want to delete your account? This action cannot be undone and all your data will be lost.',
-                [
-                  { text: 'Cancel', style: 'cancel' },
-                  { 
-                    text: 'Delete', 
-                    style: 'destructive',
-                    onPress: () => {
-                      // In a real app, you'd implement account deletion logic here
-                      Alert.alert('Account Deletion', 'This feature is not implemented in the demo app.');
-                    }
-                  }
-                ]
-              );
-            }}
-            activeOpacity={0.7}
-          >
-            <View style={styles.settingLeft}>
-              <LinearGradient
-                colors={['#F44336', '#E53935']}
-                style={styles.iconContainerGradient}
-              >
-                <Feather name="user-x" size={22} color="#FFF" />
-              </LinearGradient>
-              <View style={styles.settingInfo}>
-                <Text style={[styles.settingTitle, { color: colors.text }]}>Delete Account</Text>
-                <Text style={[styles.settingDescription, { color: colors.textSecondary }]}>
-                  Permanently delete your account and data
                 </Text>
               </View>
             </View>

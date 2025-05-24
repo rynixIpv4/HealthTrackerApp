@@ -18,7 +18,7 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import DatePicker from 'react-native-date-picker';
-import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import { useNavigation, useRoute, RouteProp, useFocusEffect } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import BackButton from '../components/BackButton';
 import { RootStackParamList } from '../navigation/AppNavigator';
@@ -74,10 +74,22 @@ const HealthDetailsScreen = () => {
   const { theme, isDarkMode } = useTheme();
   const colors = getThemeColors(theme);
 
+  // Initial fetch
   useEffect(() => {
-    // Fetch health data from all available sources
     fetchHealthData();
   }, []);
+
+  // Add a focus effect to reload data when screen comes into focus
+  useFocusEffect(
+    React.useCallback(() => {
+      console.log('Health Details screen is focused, fetching data again');
+      fetchHealthData();
+      return () => {
+        // This runs when screen loses focus
+        console.log('Health Details screen lost focus');
+      };
+    }, [])
+  );
 
   const fetchHealthData = async () => {
     const user = getCurrentUser();

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -55,6 +55,11 @@ const ActivityScreen: React.FC<ActivityScreenProps> = ({ navigation }) => {
   const [lastUpdated, setLastUpdated] = useState<string>('');
   const [dataLoaded, setDataLoaded] = useState<boolean>(false);
   const [unreadNotifications, setUnreadNotifications] = useState<number>(3); // Notification counter
+  
+  // Add debounce timer and last updated heart rate value for debouncing logic
+  const lastHeartRateUpdateRef = useRef<number>(0);
+  const lastHeartRateValueRef = useRef<number>(71);
+  const heartRateUpdateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
   // Access data from the BluetoothContext
   const { selectedDevice } = useBluetooth();
@@ -117,6 +122,51 @@ const ActivityScreen: React.FC<ActivityScreenProps> = ({ navigation }) => {
     }
   };
 
+  // Function to update heart rate with debouncing
+  const updateHeartRateWithDebounce = useCallback((newHeartRate: number) => {
+    // Store the latest value in ref
+    lastHeartRateValueRef.current = newHeartRate;
+    
+    // Don't update too frequently - enforce minimum 1 second between updates
+    const now = Date.now();
+    const timeSinceLastUpdate = now - lastHeartRateUpdateRef.current;
+    
+    // Clear any pending update
+    if (heartRateUpdateTimeoutRef.current) {
+      clearTimeout(heartRateUpdateTimeoutRef.current);
+      heartRateUpdateTimeoutRef.current = null;
+    }
+    
+    if (timeSinceLastUpdate < 1000) {
+      // Schedule update after delay
+      heartRateUpdateTimeoutRef.current = setTimeout(() => {
+        setCurrentHeartRate(lastHeartRateValueRef.current);
+        
+        // Only update history in Daily view with latest value
+        if (activeTab === 'Daily' && heartRateHistory.length > 0) {
+          const newHistory = [...heartRateHistory];
+          newHistory[newHistory.length - 1] = lastHeartRateValueRef.current;
+          setHeartRateHistory(newHistory);
+        }
+        
+        lastHeartRateUpdateRef.current = Date.now();
+        heartRateUpdateTimeoutRef.current = null;
+      }, 1000 - timeSinceLastUpdate);
+    } else {
+      // Update immediately if enough time has passed
+      setCurrentHeartRate(newHeartRate);
+      
+      // Only update history in Daily view
+      if (activeTab === 'Daily' && heartRateHistory.length > 0) {
+        const newHistory = [...heartRateHistory];
+        newHistory[newHistory.length - 1] = newHeartRate;
+        setHeartRateHistory(newHistory);
+      }
+      
+      lastHeartRateUpdateRef.current = now;
+    }
+  }, [activeTab, heartRateHistory]);
+
   // Function to load real-time data from the device
   const loadRealTimeData = useCallback(async () => {
     try {
@@ -125,14 +175,17 @@ const ActivityScreen: React.FC<ActivityScreenProps> = ({ navigation }) => {
         return;
       }
       
+      // Only update current readings, but don't modify historical data for Weekly and Monthly views
+      // This prevents overriding the weekly/monthly data with daily data format
+      
       // Get step count data
       try {
         const stepData = await bluetoothService.getStepCount();
         if (stepData && stepData.steps > 0) {
           setCurrentSteps(stepData.steps);
           
-          // Store in history at the most recent time slot
-          if (stepsHistory.length > 0) {
+          // Only update history in Daily view
+          if (activeTab === 'Daily' && stepsHistory.length > 0) {
             const newHistory = [...stepsHistory];
             newHistory[newHistory.length - 1] = stepData.steps;
             setStepsHistory(newHistory);
@@ -146,14 +199,8 @@ const ActivityScreen: React.FC<ActivityScreenProps> = ({ navigation }) => {
       if (!heartRateMonitorActive) {
         try {
           const stopHeartRateMonitor = await bluetoothService.startRealtimeHeartRate((heartRate) => {
-            setCurrentHeartRate(heartRate);
-            
-            // Store in history at the most recent time slot
-            if (heartRateHistory.length > 0) {
-              const newHistory = [...heartRateHistory];
-              newHistory[newHistory.length - 1] = heartRate;
-              setHeartRateHistory(newHistory);
-            }
+            // Use the debounced heart rate update function
+            updateHeartRateWithDebounce(heartRate);
           });
           
           setHeartRateMonitorActive(true);
@@ -172,8 +219,8 @@ const ActivityScreen: React.FC<ActivityScreenProps> = ({ navigation }) => {
       try {
         const sleepData = await bluetoothService.getSleepData();
         if (sleepData && sleepData.totalSleep > 0) {
-          // Store in history at the most recent time slot
-          if (sleepHistory.length > 0) {
+          // Only update history in Daily view
+          if (activeTab === 'Daily' && sleepHistory.length > 0) {
             const newHistory = [...sleepHistory];
             newHistory[newHistory.length - 1] = sleepData.totalSleep;
             setSleepHistory(newHistory);
@@ -187,8 +234,8 @@ const ActivityScreen: React.FC<ActivityScreenProps> = ({ navigation }) => {
       try {
         const cyclingData = await bluetoothService.getCyclingData();
         if (cyclingData && cyclingData.distance > 0) {
-          // Store in history at the most recent time slot
-          if (cyclingHistory.length > 0) {
+          // Only update history in Daily view
+          if (activeTab === 'Daily' && cyclingHistory.length > 0) {
             const newHistory = [...cyclingHistory];
             newHistory[newHistory.length - 1] = cyclingData.distance;
             setCyclingHistory(newHistory);
@@ -207,7 +254,16 @@ const ActivityScreen: React.FC<ActivityScreenProps> = ({ navigation }) => {
         Alert.alert('Error', 'Failed to load data from your ring.');
       }
     }
-  }, [isDeviceConnected, activeTab, heartRateMonitorActive, bloodOxygenMonitorActive, stepsHistory, heartRateHistory, sleepHistory, cyclingHistory]);
+  }, [isDeviceConnected, activeTab, heartRateMonitorActive, bloodOxygenMonitorActive, stepsHistory, heartRateHistory, sleepHistory, cyclingHistory, updateHeartRateWithDebounce]);
+
+  // Cleanup heart rate update timeout when component unmounts
+  useEffect(() => {
+    return () => {
+      if (heartRateUpdateTimeoutRef.current) {
+        clearTimeout(heartRateUpdateTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Load data when component mounts or device connection changes
   useEffect(() => {
@@ -218,6 +274,37 @@ const ActivityScreen: React.FC<ActivityScreenProps> = ({ navigation }) => {
         if (!dataLoaded) {
           setIsLoading(true);
           await loadCachedData();
+          
+          // Initialize chart data based on active tab if not loaded from cache
+          if (activeTab === 'Weekly') {
+            // Weekly data (daily measurements)
+            const weekDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+            setStepsLabels(weekDays);
+            setHeartRateLabels(weekDays);
+            setSleepLabels(weekDays);
+            setCyclingLabels(weekDays);
+            
+            // Example weekly data
+            setStepsHistory([5200, 7800, 6300, 8900, 9200, 6500, 8100]);
+            setHeartRateHistory([75, 72, 78, 76, 80, 74, 77]);
+            setSleepHistory([6.5, 7.2, 5.8, 6.7, 8.1, 7.5, 6.9]);
+            setCyclingHistory([3.5, 0, 4.2, 0, 5.7, 2.3, 4.8]);
+          } 
+          else if (activeTab === 'Monthly') {
+            // Monthly data (weekly measurements)
+            const monthWeeks = ['Week 1', 'Week 2', 'Week 3', 'Week 4'];
+            setStepsLabels(monthWeeks);
+            setHeartRateLabels(monthWeeks);
+            setSleepLabels(monthWeeks);
+            setCyclingLabels(monthWeeks);
+            
+            // Example monthly data
+            setStepsHistory([45000, 52300, 48700, 56200]);
+            setHeartRateHistory([76, 75, 77, 78]);
+            setSleepHistory([42.5, 44.8, 40.3, 45.2]);
+            setCyclingHistory([18.5, 22.3, 15.7, 25.8]);
+          }
+          
           setDataLoaded(true);
           setIsLoading(false);
         }
@@ -261,7 +348,49 @@ const ActivityScreen: React.FC<ActivityScreenProps> = ({ navigation }) => {
   // Handle tab change without generating fake data
   const handleTabChange = (tab: string) => {
     setActiveTab(tab);
-    // Only cache the updated tab preference
+    
+    // Update chart data based on the selected tab
+    if (tab === 'Daily') {
+      // Daily data (hourly measurements)
+      setStepsLabels(['6AM', '9AM', '12PM', '3PM', '6PM', '9PM']);
+      setHeartRateLabels(['6AM', '9AM', '12PM', '3PM', '6PM', '9PM']);
+      
+      // Example daily data
+      setStepsHistory([100, 250, 400, 600, 800, 1050]);
+      setHeartRateHistory([72, 75, 80, 78, 82, 79]);
+      setSleepHistory([2, 4, 7, 5, 6, 8]);
+      setCyclingHistory([1, 3, 5, 2, 4, 6]);
+    } 
+    else if (tab === 'Weekly') {
+      // Weekly data (daily measurements)
+      const weekDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+      setStepsLabels(weekDays);
+      setHeartRateLabels(weekDays);
+      setSleepLabels(weekDays);
+      setCyclingLabels(weekDays);
+      
+      // Example weekly data
+      setStepsHistory([5200, 7800, 6300, 8900, 9200, 6500, 8100]);
+      setHeartRateHistory([75, 72, 78, 76, 80, 74, 77]);
+      setSleepHistory([6.5, 7.2, 5.8, 6.7, 8.1, 7.5, 6.9]);
+      setCyclingHistory([3.5, 0, 4.2, 0, 5.7, 2.3, 4.8]);
+    } 
+    else if (tab === 'Monthly') {
+      // Monthly data (weekly measurements)
+      const monthWeeks = ['Week 1', 'Week 2', 'Week 3', 'Week 4'];
+      setStepsLabels(monthWeeks);
+      setHeartRateLabels(monthWeeks);
+      setSleepLabels(monthWeeks);
+      setCyclingLabels(monthWeeks);
+      
+      // Example monthly data
+      setStepsHistory([45000, 52300, 48700, 56200]);
+      setHeartRateHistory([76, 75, 77, 78]);
+      setSleepHistory([42.5, 44.8, 40.3, 45.2]);
+      setCyclingHistory([18.5, 22.3, 15.7, 25.8]);
+    }
+    
+    // Only cache the updated tab preference and data
     cacheData();
   };
   
@@ -475,7 +604,7 @@ const ActivityScreen: React.FC<ActivityScreenProps> = ({ navigation }) => {
                 </View>
                 <View>
                   <Text style={[styles.metricTitle, { color: colors.text }]}>Steps Overview</Text>
-                  <Text style={[styles.metricValue, { color: colors.textSecondary }]}>{currentSteps} steps</Text>
+                  <Text style={[styles.metricValue, { color: colors.text }]}>{currentSteps} steps</Text>
                 </View>
               </View>
               <TouchableOpacity style={styles.detailsButton} onPress={() => navigateToDetails(SCREENS.STEPS)}>
@@ -493,7 +622,7 @@ const ActivityScreen: React.FC<ActivityScreenProps> = ({ navigation }) => {
                   ]} 
                 />
               </View>
-              <Text style={[styles.progressText, { color: colors.textSecondary }]}>{getStepsProgress().toFixed(0)}% of daily goal</Text>
+              <Text style={[styles.progressText, { color: colors.text }]}>{getStepsProgress().toFixed(0)}% of daily goal</Text>
           </View>
             
             <CustomLineChart 
@@ -522,9 +651,9 @@ const ActivityScreen: React.FC<ActivityScreenProps> = ({ navigation }) => {
                 </View>
                 <View>
                   <Text style={[styles.metricTitle, { color: colors.text }]}>Heart Rate</Text>
-                  <Text style={[styles.metricValue, { color: colors.textSecondary }]}>{currentHeartRate} bpm</Text>
-          </View>
-        </View>
+                  <Text style={[styles.metricValue, { color: colors.text }]}>{currentHeartRate} bpm</Text>
+                </View>
+              </View>
               <TouchableOpacity style={styles.detailsButton} onPress={() => navigateToDetails(SCREENS.HEART_RATE)}>
                 <Text style={{ color: colors.chartRed, ...styles.detailsText }}>Details</Text>
                 <FeatherIcon name="chevron-right" size={16} color={colors.chartRed} />
@@ -540,7 +669,7 @@ const ActivityScreen: React.FC<ActivityScreenProps> = ({ navigation }) => {
                   ]} 
                 />
               </View>
-              <Text style={[styles.progressText, { color: colors.textSecondary }]}>{getHeartRateProgress()}% of daily goal</Text>
+              <Text style={[styles.progressText, { color: colors.text }]}>{getHeartRateProgress()}% of daily goal</Text>
             </View>
             
             <CustomLineChart 
@@ -565,7 +694,7 @@ const ActivityScreen: React.FC<ActivityScreenProps> = ({ navigation }) => {
                 </View>
                 <View>
                   <Text style={[styles.metricTitle, { color: colors.text }]}>Cycling</Text>
-                  <Text style={[styles.metricValue, { color: colors.textSecondary }]}>{cyclingHistory[cyclingHistory.length-1]} km</Text>
+                  <Text style={[styles.metricValue, { color: colors.text }]}>{cyclingHistory[cyclingHistory.length-1]} km</Text>
                 </View>
               </View>
               <TouchableOpacity style={styles.detailsButton} onPress={() => navigateToDetails(SCREENS.CYCLING)}>
@@ -583,7 +712,7 @@ const ActivityScreen: React.FC<ActivityScreenProps> = ({ navigation }) => {
                   ]} 
                 />
               </View>
-              <Text style={[styles.progressText, { color: colors.textSecondary }]}>75% of daily goal</Text>
+              <Text style={[styles.progressText, { color: colors.text }]}>75% of daily goal</Text>
           </View>
             
             <CustomLineChart 
@@ -611,9 +740,9 @@ const ActivityScreen: React.FC<ActivityScreenProps> = ({ navigation }) => {
                 </View>
                 <View>
                   <Text style={[styles.metricTitle, { color: colors.text }]}>Sleep</Text>
-                  <Text style={[styles.metricValue, { color: colors.textSecondary }]}>{sleepHistory[sleepHistory.length-1]} hours</Text>
-          </View>
-        </View>
+                  <Text style={[styles.metricValue, { color: colors.text }]}>{sleepHistory[sleepHistory.length-1]} hours</Text>
+                </View>
+              </View>
               <TouchableOpacity style={styles.detailsButton} onPress={() => {
                 console.log('Sleep details button pressed');
                 safeNavigate(navigation, 'Sleep');
